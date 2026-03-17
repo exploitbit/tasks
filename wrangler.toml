@@ -1,6 +1,6 @@
-name = "telegram-id-bot"
+name = "icoky"
 main = "worker.js"
-compatibility_date = "2024-04-01"
+compatibility_date = "2024-09-23"
 compatibility_flags = [ "nodejs_compat" ]
 
 [vars]
