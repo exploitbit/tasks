@@ -1,5 +1,4 @@
 const BOT_TOKEN = "8716545255:AAEevulA_Q8sz-cjEXs_9-mN8leuoGI-RSk";
-const ADMIN_ID = "8781152810"; // Your Telegram User ID
 
 const HTML_CONTENT = `
 <!DOCTYPE html>
@@ -7,97 +6,113 @@ const HTML_CONTENT = `
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tasks</title>
+    <title>Digital ID Card</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: -apple-system, sans-serif; background: var(--tg-theme-bg-color, #f3f4f6); color: var(--tg-theme-text-color, #111827); padding: 16px; margin: 0; user-select: none; }
-        .container { max-width: 600px; margin: 0 auto; }
-        .header { font-size: 24px; font-weight: bold; margin-bottom: 20px; }
-        .input-group { display: flex; gap: 8px; margin-bottom: 20px; }
-        input { flex: 1; padding: 12px; border: 1px solid var(--tg-theme-hint-color, #ccc); border-radius: 12px; font-size: 16px; outline: none; background: var(--tg-theme-secondary-bg-color, #fff); color: var(--tg-theme-text-color, #000); }
-        input:focus { border-color: var(--tg-theme-button-color, #2563eb); }
-        button { padding: 12px 20px; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; background: var(--tg-theme-button-color, #2563eb); color: var(--tg-theme-button-text-color, #fff); cursor: pointer; }
-        .task-list { list-style: none; padding: 0; margin: 0; }
-        .task-item { background: var(--tg-theme-secondary-bg-color, #fff); padding: 16px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .task-text { flex: 1; font-size: 16px; cursor: pointer; }
-        .task-text.done { text-decoration: line-through; opacity: 0.5; }
-        .delete { color: #ef4444; background: none; border: none; font-size: 20px; cursor: pointer; padding: 0 0 0 15px; }
+        body {
+            background: #0f172a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Poppins', sans-serif;
+            padding: 16px;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        .card {
+            width: 100%;
+            max-width: 640px;
+            aspect-ratio: 16/9;
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            border-radius: 20px;
+            padding: 25px;
+            box-sizing: border-box;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.2);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+        }
+        /* Glassmorphism shine effect */
+        .card::before {
+            content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+            pointer-events: none;
+        }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; position: relative; z-index: 2; }
+        .logo { display: flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 700; }
+        .logo i { font-size: 32px; color: #fff; }
+        .title { font-size: 16px; font-weight: 700; letter-spacing: 2px; text-align: right; opacity: 0.9; max-width: 150px;}
+        .content { display: flex; justify-content: space-between; align-items: flex-end; position: relative; z-index: 2; }
+        .details { display: flex; flex-direction: column; gap: 4px; }
+        .name { font-size: 24px; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;}
+        .username, .userid { font-size: 13px; color: #bfdbfe; font-weight: 500; }
+        .code { font-size: 20px; font-family: 'Courier New', Courier, monospace; letter-spacing: 4px; margin-top: 15px; font-weight: bold; background: rgba(0,0,0,0.2); padding: 5px 10px; border-radius: 8px; width: fit-content;}
+        .profile-container { width: 100px; height: 100px; border-radius: 16px; overflow: hidden; border: 3px solid rgba(255,255,255,0.7); box-shadow: 0 10px 20px rgba(0,0,0,0.3); background: #cbd5e1; flex-shrink: 0;}
+        .profile-container img { width: 100%; height: 100%; object-fit: cover; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header" id="greeting">Loading Tasks...</div>
-        <div class="input-group">
-            <input type="text" id="taskInput" placeholder="Add a new task...">
-            <button onclick="addTask()">Add</button>
+    <div class="card" id="idCard">
+        <div class="header">
+            <div class="logo"><i class="fab fa-telegram"></i> ID</div>
+            <div class="title">CHILDRENS PROVIENCE</div>
         </div>
-        <ul class="task-list" id="taskList"></ul>
+        <div class="content">
+            <div class="details">
+                <div class="name" id="name">Loading...</div>
+                <div class="username" id="username">@username</div>
+                <div class="userid" id="userid">ID: --------</div>
+                <div class="code" id="code">0000 0000 0000</div>
+            </div>
+            <div class="profile-container">
+                <img id="profile" src="https://via.placeholder.com/150" alt="Profile">
+            </div>
+        </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.ready(); tg.expand();
 
-        const userId = tg.initDataUnsafe?.user?.id || "guest";
-        document.getElementById('greeting').innerText = (tg.initDataUnsafe?.user?.first_name || "Guest") + "'s Tasks";
-        let tasks = [];
+        // 1. Get User Data straight from Telegram App
+        const user = tg.initDataUnsafe?.user || {
+            first_name: "Guest", last_name: "", username: "guest_user", id: "000000000"
+        };
 
-        async function fetchTasks() {
-            const res = await fetch('/api/tasks?user_id=' + userId);
-            tasks = await res.json();
-            renderTasks();
-        }
+        // 2. Populate Card
+        document.getElementById('name').innerText = (user.first_name + " " + (user.last_name || "")).trim();
+        document.getElementById('username').innerText = user.username ? "@" + user.username : "No Username";
+        document.getElementById('userid').innerText = "ID: " + user.id;
 
-        async function saveTasks() {
-            await fetch('/api/tasks', { method: 'POST', body: JSON.stringify({ user_id: userId, tasks }) });
-        }
+        // 3. Generate Random 12-Digit Code
+        let randomCode = "";
+        for(let i=0; i<12; i++) randomCode += Math.floor(Math.random() * 10);
+        document.getElementById('code').innerText = randomCode.match(/.{1,4}/g).join(' ');
 
-        function addTask() {
-            const input = document.getElementById('taskInput');
-            if (!input.value.trim()) return;
-            tasks.push({ title: input.value.trim(), done: false });
-            input.value = '';
-            renderTasks(); saveTasks();
-            if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        // 4. Set Profile Picture
+        if(user.photo_url) {
+            document.getElementById('profile').src = user.photo_url;
         }
-
-        function toggleTask(index) {
-            tasks[index].done = !tasks[index].done;
-            renderTasks(); saveTasks();
-            if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
-        }
-
-        function removeTask(index) {
-            tasks.splice(index, 1);
-            renderTasks(); saveTasks();
-            if(tg.HapticFeedback) tg.HapticFeedback.impactOccurred('rigid');
-        }
-
-        function renderTasks() {
-            const list = document.getElementById('taskList');
-            list.innerHTML = tasks.map((t, i) => \`
-                <li class="task-item">
-                    <div class="task-text \${t.done ? 'done' : ''}" onclick="toggleTask(\${i})">
-                        \${t.done ? '✅ ' : '⏳ '}\${t.title}
-                    </div>
-                    <button class="delete" onclick="removeTask(\${i})">✕</button>
-                </li>
-            \`).join('');
-        }
-        fetchTasks();
     </script>
 </body>
 </html>
 `;
 
-// Helper function to send Telegram messages
+// Helper to send messages
 async function sendTelegramMessage(chatId, text, webAppUrl) {
     const payload = {
         chat_id: chatId,
         text: text,
         parse_mode: "HTML",
         reply_markup: {
-            inline_keyboard: [[{ text: "🌐 Open Task Manager", web_app: { url: webAppUrl } }]]
+            inline_keyboard: [[{ text: "🪪 View My Data Card", web_app: { url: webAppUrl } }]]
         }
     };
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -108,112 +123,42 @@ async function sendTelegramMessage(chatId, text, webAppUrl) {
 }
 
 export default {
-    async fetch(request, env) {
+    async fetch(request) {
         const url = new URL(request.url);
         const path = url.pathname;
         const method = request.method;
         const baseUrl = `${url.protocol}//${url.host}`;
         const jsonHeaders = { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" };
 
-        // ==========================================
-        // 1. SETUP WEBHOOK & NOTIFY ADMIN
-        // ==========================================
+        // 1. SETUP WEBHOOK
         if (path === "/setup") {
             const webhookUrl = `${baseUrl}/webhook`;
             const tgApi = `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${webhookUrl}`;
             const res = await fetch(tgApi);
-            const tgResponse = await res.text();
-
-            // Send deployment notification to the Admin
-            const adminPayload = {
-                chat_id: ADMIN_ID,
-                text: `🚀 <b>Deployment Successful!</b>\n\nYour Cloudflare Worker is live and the webhook is securely connected to:\n<code>${baseUrl}</code>\n\nSend /start to test it!`,
-                parse_mode: "HTML"
-            };
-            await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(adminPayload)
-            });
-
-            return new Response(tgResponse, { headers: jsonHeaders });
+            return new Response(await res.text(), { headers: jsonHeaders });
         }
 
-        // ==========================================
-        // 2. TELEGRAM BOT COMMAND HANDLER
-        // ==========================================
+        // 2. TELEGRAM BOT HANDLER
         if (path === "/webhook" && method === "POST") {
             try {
                 const update = await request.json();
                 
                 if (update.message && update.message.text) {
                     const chatId = update.message.chat.id;
-                    const userId = update.message.from.id;
                     const firstName = update.message.from.first_name || "User";
                     const text = update.message.text;
 
-                    // Command: /start
+                    // When they press /start, send them the card button
                     if (text.startsWith("/start")) {
-                        const welcomeMsg = `👋 Welcome, <b>${firstName}</b>!\n\nI am your personal Task Manager. Click the button below to launch the Mini App.`;
+                        const welcomeMsg = `👋 Welcome, <b>${firstName}</b>!\n\nYour profile has been authenticated. Click the button below to view your official Data Card.`;
                         await sendTelegramMessage(chatId, welcomeMsg, baseUrl);
                     } 
-                    
-                    // Command: /help
-                    else if (text.startsWith("/help")) {
-                        const helpMsg = `🛠 <b>How to use this bot:</b>\n\n1️⃣ Use the <b>Menu Button</b> or /start to open the Web App.\n2️⃣ Add tasks, mark them as done, or delete them inside the app.\n3️⃣ Use /stats to see your current progress without opening the app.\n\nEverything syncs instantly to the cloud!`;
-                        await sendTelegramMessage(chatId, helpMsg, baseUrl);
-                    } 
-                    
-                    // Command: /stats
-                    else if (text.startsWith("/stats")) {
-                        // Fetch the user's personal task list directly from Cloudflare KV
-                        const userTasksStr = await env.TASKS_KV.get(`tasks_${userId}`) || "[]";
-                        const userTasks = JSON.parse(userTasksStr);
-                        
-                        const total = userTasks.length;
-                        const completed = userTasks.filter(t => t.done).length;
-                        const pending = total - completed;
-                        
-                        let statsMsg = `📊 <b>Your Task Summary:</b>\n\n`;
-                        statsMsg += `📝 <b>Total Tasks:</b> ${total}\n`;
-                        statsMsg += `✅ <b>Completed:</b> ${completed}\n`;
-                        statsMsg += `⏳ <b>Pending:</b> ${pending}\n`;
-                        
-                        if (total > 0) {
-                            const percent = Math.round((completed / total) * 100);
-                            statsMsg += `\n🎯 <b>Progress:</b> ${percent}%`;
-                        } else {
-                            statsMsg += `\n<i>You have no tasks yet. Open the app to add some!</i>`;
-                        }
-
-                        await sendTelegramMessage(chatId, statsMsg, baseUrl);
-                    }
                 }
             } catch (e) { console.error("Webhook processing error:", e); }
             return new Response("OK", { status: 200 });
         }
 
-        // ==========================================
-        // 3. GET TASKS API
-        // ==========================================
-        if (path === "/api/tasks" && method === "GET") {
-            const userId = url.searchParams.get("user_id") || "guest";
-            const data = await env.TASKS_KV.get(`tasks_${userId}`) || "[]";
-            return new Response(data, { headers: jsonHeaders });
-        }
-
-        // ==========================================
-        // 4. SAVE TASKS API
-        // ==========================================
-        if (path === "/api/tasks" && method === "POST") {
-            const data = await request.json();
-            await env.TASKS_KV.put(`tasks_${data.user_id}`, JSON.stringify(data.tasks));
-            return new Response(JSON.stringify({ success: true }), { headers: jsonHeaders });
-        }
-
-        // ==========================================
-        // 5. SERVE FRONTEND MINI APP
-        // ==========================================
+        // 3. SERVE FRONTEND CARD (Mini App)
         if (path === "/" || path === "/index.html") {
             return new Response(HTML_CONTENT, { headers: { "Content-Type": "text/html" } });
         }
