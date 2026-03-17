@@ -1,5 +1,5 @@
 name = "tg-task-manager"
-main = "src/main.py"
+main = "main.py"
 compatibility_date = "2024-03-20"
 compatibility_flags = ["python_workers"]
 
