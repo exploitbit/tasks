@@ -8,16 +8,14 @@ const CONFIG = {
     API_SECRET: "ZmDXv6UketNHdwE-prYTesesZ7I"
 };
 
-// Helper: Convert Image URL to Base64 (to bypass URL fetch blocks)
-const toBase64 = async (url) => {
-    const res = await fetch(url);
-    const buffer = await res.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    return `data:image/jpeg;base64,${btoa(binary)}`;
+// Helper: URL-Safe Base64 Encoding
+const safeB64 = (str) => {
+    const bytes = new TextEncoder().encode(str);
+    const binString = String.fromCodePoint(...bytes);
+    return btoa(binString).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 };
 
+// Helper: SHA-1 Signer for Cloudinary REST API
 async function generateSignature(params, secret) {
     const sortedKeys = Object.keys(params).sort();
     const signatureString = sortedKeys.map(k => `${k}=${params[k]}`).join("&") + secret;
@@ -28,68 +26,64 @@ async function generateSignature(params, secret) {
 export default {
     async fetch(request) {
         const bot = new Telegraf(CONFIG.BOT_TOKEN);
-        const safeB64 = (str) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
-        bot.start((ctx) => ctx.reply("🔱 CHILDREN'S PROVIENCE ID SYSTEM\n\nSend a photo to generate your Full Data Card (including PFP)."));
+        bot.start((ctx) => ctx.reply("🖼 Send an image. I will overlay your profile picture on top of it."));
 
         bot.on(['photo', 'document'], async (ctx) => {
             let status;
             try {
-                const fileId = ctx.message.photo ? ctx.message.photo[ctx.message.photo.length - 1].file_id : ctx.message.document?.file_id;
+                const photo = ctx.message.photo;
+                const fileId = photo ? photo[photo.length - 1].file_id : ctx.message.document?.file_id;
                 if (!fileId) return;
 
-                status = await ctx.reply("⚙️ Stage 1/2: Processing Assets...");
+                status = await ctx.reply("⚙️ Processing ID Card...");
 
-                // 1. Download & Upload Background
+                // 1. Get Background from Telegram
                 const bgFile = await ctx.telegram.getFile(fileId);
-                const bgData = await toBase64(`https://api.telegram.org/file/bot${CONFIG.BOT_TOKEN}/${bgFile.file_path}`);
+                const bgUrl = `https://api.telegram.org/file/bot${CONFIG.BOT_TOKEN}/${bgFile.file_path}`;
 
+                // 2. Upload Background to Cloudinary (Required for stable overlays)
                 const timestamp = Math.round(Date.now() / 1000);
-                const publicId = `full_id_${ctx.from.id}_${timestamp}`;
+                const publicId = `bg_${ctx.from.id}_${timestamp}`;
                 const signature = await generateSignature({ public_id: publicId, timestamp: timestamp }, CONFIG.API_SECRET);
 
                 const formData = new FormData();
-                formData.append("file", bgData);
+                formData.append("file", bgUrl);
                 formData.append("api_key", CONFIG.API_KEY);
                 formData.append("timestamp", timestamp);
                 formData.append("public_id", publicId);
                 formData.append("signature", signature);
 
-                const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CONFIG.CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+                const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CONFIG.CLOUD_NAME}/image/upload`, {
+                    method: "POST", body: formData
+                });
                 const uploadData = await uploadRes.json();
+                if (!uploadData.public_id) throw new Error("Background upload failed");
 
-                // 2. Download & Encode Profile Picture
-                await ctx.telegram.editMessageText(ctx.chat.id, status.message_id, undefined, "🎨 Stage 2/2: Finalizing Graphics...");
+                // 3. Get Profile Picture
                 const pfpData = await ctx.telegram.getUserProfilePhotos(ctx.from.id, 0, 1);
-                let pfpBase64 = "https://res.cloudinary.com/demo/image/upload/v1/avatar.png";
-                
+                let pfpUrl = "https://res.cloudinary.com/demo/image/upload/v1/avatar.png";
                 if (pfpData.total_count > 0) {
                     const pfpFile = await ctx.telegram.getFile(pfpData.photos[0][0].file_id);
-                    pfpBase64 = await toBase64(`https://api.telegram.org/file/bot${CONFIG.BOT_TOKEN}/${pfpFile.file_path}`);
+                    pfpUrl = `https://api.telegram.org/file/bot${CONFIG.BOT_TOKEN}/${pfpFile.file_path}`;
                 }
 
-                // 3. Build Detailed Transformation
-                const name = (ctx.from.first_name || "AGENT").toUpperCase();
-                const userId = ctx.from.id;
-                const code = Array.from({length: 12}, () => Math.floor(Math.random() * 10)).join('').match(/.{1,4}/g).join('  ');
-
+                // 4. Construct the Overlay URL
+                // Logic: l_fetch:[EncodedURL] / [Dimensions] / fl_layer_apply, [Gravity/Position]
+                const encodedPfp = safeB64(pfpUrl);
                 const layers = [
-                    `w_1280,h_720,c_fill,e_brightness:-40`,
-                    `l_text:Arial_45_bold:CHILDRENS%20PROVIENCE,g_north,y_60,co_white`,
-                    // Profile Pic Layer (Using Base64 encoding to prevent fetch block)
-                    `l_fetch:${safeB64(pfpBase64)}/w_240,h_240,c_fill,r_max,bo_10px_solid_white,g_west,x_120,y_30`,
-                    `l_text:Arial_55_bold:${encodeURIComponent(name)},g_west,x_420,y_20,co_white`,
-                    `l_text:Arial_30:UID:%20${userId},g_west,x_420,y_90,co_rgb:38bdf8`,
-                    `l_text:Courier_60_bold:${encodeURIComponent(code)},g_south_east,x_100,y_80,co_white`
+                    `w_1280,h_720,c_fill,e_brightness:-20`, // Scale BG and dim slightly
+                    `l_fetch:${encodedPfp}/w_300,h_300,c_fill,r_max,bo_10px_solid_white/fl_layer_apply,g_west,x_100` // Circular PFP on the left
                 ];
 
                 const finalUrl = `https://res.cloudinary.com/${CONFIG.CLOUD_NAME}/image/upload/${layers.join('/')}/${uploadData.public_id}.jpg`;
 
-                await ctx.replyWithPhoto(finalUrl, { caption: `✅ <b>Full Data Card Ready</b>`, parse_mode: 'HTML' });
+                // 5. Send back to Telegram
+                await ctx.replyWithPhoto(finalUrl, { caption: "✅ Profile Picture Overlay Complete." });
                 await ctx.deleteMessage(status.message_id).catch(() => {});
 
             } catch (err) {
-                await ctx.reply(`❌ <b>System Error</b>\n<code>${err.message}</code>`, { parse_mode: 'HTML' });
+                await ctx.reply(`❌ Error: ${err.message}`);
             }
         });
 
@@ -99,9 +93,10 @@ export default {
             return new Response("OK");
         }
         if (url.pathname === "/setup") {
-            await fetch(`https://api.telegram.org/bot${CONFIG.BOT_TOKEN}/setWebhook?url=${url.protocol}//${url.host}/webhook`);
-            return new Response("Setup Complete");
+            const webhookUrl = `${url.protocol}//${url.host}/webhook`;
+            await fetch(`https://api.telegram.org/bot${CONFIG.BOT_TOKEN}/setWebhook?url=${webhookUrl}`);
+            return new Response("Webhook set!");
         }
-        return new Response("Ready");
+        return new Response("Bot is active.");
     }
 };
