@@ -1,16 +1,23 @@
 const BOT_TOKEN = "8716545255:AAEevulA_Q8sz-cjEXs_9-mN8leuoGI-RSk";
 const CLOUDINARY_CLOUD_NAME = "dneusgyzc"; 
 
-const btoaUrl = (str) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+// Helper: Securely encode URLs for Cloudinary layers
+const cleanUrl = (url) => btoa(url).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+
+async function tgApi(method, body) {
+    return await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+    });
+}
 
 export default {
-    async fetch(request, env) {
+    async fetch(request) {
         const url = new URL(request.url);
-        const baseUrl = `${url.protocol}//${url.host}`;
-
         if (url.pathname === "/setup") {
-            const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${baseUrl}/webhook`);
-            return new Response(await res.text());
+            const s = await tgApi("setWebhook", { url: `${url.protocol}//${url.host}/webhook` });
+            return new Response(await s.text());
         }
 
         if (url.pathname === "/webhook" && request.method === "POST") {
@@ -21,78 +28,73 @@ export default {
             const chatId = msg.chat.id;
             const userId = msg.from.id;
 
-            // 1. Handle /start - Ask for Image
+            // 1. COMMAND: /start
             if (msg.text && msg.text.startsWith("/start")) {
-                await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        chat_id: chatId,
-                        text: "📸 <b>Step 1: Upload a Background</b>\n\nPlease send me the image you want to use as your card background!",
-                        parse_mode: "HTML"
-                    })
+                await tgApi("sendMessage", {
+                    chat_id: chatId,
+                    text: "🎨 <b>Welcome to Childrens Provience</b>\n\nTo generate your Elite Data Card, please <b>Send or Forward</b> any image/file you want as your background.",
+                    parse_mode: "HTML"
                 });
                 return new Response("OK");
             }
 
-            // 2. Handle Image Upload
-            if (msg.photo) {
-                const fileId = msg.photo[msg.photo.length - 1].file_id;
-                const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`);
-                const fileData = await fileRes.json();
-                const tgImgUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${fileData.result.file_path}`;
+            // 2. HANDLE ANY FILE (Photo or Document)
+            const photo = msg.photo ? msg.photo[msg.photo.length - 1] : (msg.document && msg.document.mime_type.includes('image') ? msg.document : null);
+            
+            if (photo) {
+                const status = await tgApi("sendMessage", { chat_id: chatId, text: "⚙️ <b>Processing your Data Card...</b>", parse_mode: "HTML" });
+                const statusJson = await status.json();
 
-                await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ chat_id: chatId, text: "⚙️ <b>Processing your Data Card...</b>", parse_mode: "HTML" })
-                });
+                try {
+                    // Get File Path from Telegram
+                    const file = await (await tgApi("getFile", { file_id: photo.file_id })).json();
+                    const bgUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.result.file_path}`;
 
-                // Get User Profile Pic
-                const pfpRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getUserProfilePhotos?user_id=${userId}&limit=1`);
-                const pfpData = await pfpRes.json();
-                let pfpUrl = "https://res.cloudinary.com/demo/image/upload/d_avatar.png/v1/avatar.png";
-                if (pfpData.result.total_count > 0) {
-                    const pfpFile = await (await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${pfpData.result.photos[0][0].file_id}`)).json();
-                    pfpUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${pfpFile.result.file_path}`;
-                }
+                    // Get User Profile Pic
+                    const pfpData = await (await tgApi("getUserProfilePhotos", { user_id: userId, limit: 1 })).json();
+                    let pfpUrl = "https://res.cloudinary.com/demo/image/upload/d_avatar.png/v1/avatar.png";
+                    if (pfpData.result?.total_count > 0) {
+                        const pfpFile = await (await tgApi("getFile", { file_id: pfpData.result.photos[0][0].file_id })).json();
+                        pfpUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${pfpFile.result.file_path}`;
+                    }
 
-                // Data for Card
-                const name = (msg.from.first_name || "User").toUpperCase();
-                const username = msg.from.username ? `@${msg.from.username}` : "CLASSIFIED";
-                let code = "";
-                for(let i=0; i<12; i++) code += Math.floor(Math.random() * 10);
-                const formattedCode = code.match(/.{1,4}/g).join('  ');
+                    // Card Details
+                    const name = (msg.from.first_name || "AGENT").toUpperCase();
+                    const username = msg.from.username ? `@${msg.from.username}` : "CLASSIFIED";
+                    const code = Array.from({length: 12}, () => Math.floor(Math.random() * 10)).join('').match(/.{1,4}/g).join('  ');
 
-                // Cloudinary URL Logic
-                const b64Bg = btoaUrl(tgImgUrl);
-                const b64Pfp = btoaUrl(pfpUrl);
+                    // --- THE CLOUDINARY ENGINE ---
+                    const b64Pfp = cleanUrl(pfpUrl);
+                    
+                    const layers = [
+                        `w_1280,h_720,c_fill,q_auto,f_auto,e_brightness:-30`, // Optimize BG
+                        `l_text:Arial_45_bold_letter_spacing_6:CHILDRENS%20PROVIENCE/co_white,g_north,y_60/fl_layer_apply`, // Title
+                        `l_fetch:${b64Pfp}/w_240,h_240,c_fill,r_max,bo_10px_solid_white/g_west,x_120,y_30/fl_layer_apply`, // Circle PFP
+                        `l_text:Arial_55_bold:${encodeURIComponent(name)}/co_white,g_west,x_420,y_20/fl_layer_apply`, // Name
+                        `l_text:Arial_35:${encodeURIComponent(username)}/co_rgb:38bdf8,g_west,x_420,y_90/fl_layer_apply`, // Username
+                        `l_text:Courier_30_bold:UID:%20${userId}/co_rgb:94a3b8,g_south_west,x_120,y_80/fl_layer_apply`, // ID
+                        `l_text:Courier_60_bold:${encodeURIComponent(code)}/co_white,g_south_east,x_100,y_80/fl_layer_apply` // Card Code
+                    ];
 
-                const transformations = [
-                    `w_1280,h_720,c_fill,e_brightness:-20`, // Dim background for readability
-                    `l_text:Arial_40_bold_letter_spacing_5:CHILDRENS%20PROVIENCE/co_white,g_north,y_60/fl_layer_apply`,
-                    `l_fetch:${b64Pfp}/w_240,h_240,c_fill,r_max,bo_8px_solid_white/g_west,x_120,y_20/fl_layer_apply`,
-                    `l_text:Arial_55_bold:${encodeURIComponent(name)}/co_white,g_west,x_420,y_10/fl_layer_apply`,
-                    `l_text:Arial_32:${encodeURIComponent(username)}/co_rgb:38bdf8,g_west,x_420,y_80/fl_layer_apply`,
-                    `l_text:Courier_28_bold:USER%20ID:%20${userId}/co_rgb:cbd5e1,g_south_west,x_120,y_80/fl_layer_apply`,
-                    `l_text:Courier_60_bold:${encodeURIComponent(formattedCode)}/co_white,g_south_east,x_100,y_80/fl_layer_apply`
-                ];
+                    const finalUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/fetch/${layers.join('/')}/${bgUrl}`;
 
-                const finalImageUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/fetch/${transformations.join('/')}/${tgImgUrl}`;
-
-                await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
+                    // Send the final result
+                    await tgApi("sendPhoto", {
                         chat_id: chatId,
-                        photo: finalImageUrl,
-                        caption: `✅ <b>Card Generated Successfully!</b>`,
+                        photo: finalUrl,
+                        caption: `✅ <b>Card Successfully Encrypted</b>\n\nUser: ${name}\nStatus: Active Member`,
                         parse_mode: "HTML"
-                    })
-                });
+                    });
+
+                    // Remove "Processing" message
+                    await tgApi("deleteMessage", { chat_id: chatId, message_id: statusJson.result.message_id });
+
+                } catch (err) {
+                    await tgApi("sendMessage", { chat_id: chatId, text: "❌ <b>Generation Failed.</b> Please try a different image." });
+                }
             }
             return new Response("OK");
         }
-        return new Response("Bot Active");
+        return new Response("Active");
     }
 };
