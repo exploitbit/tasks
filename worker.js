@@ -1,6 +1,5 @@
 import { Telegraf } from 'telegraf';
 
-// --- CONFIGURATION ---
 const CONFIG = {
     BOT_TOKEN: "8716545255:AAEevulA_Q8sz-cjEXs_9-mN8leuoGI-RSk",
     CLOUD_NAME: "dneusgyzc",
@@ -13,10 +12,7 @@ const CONFIG = {
  */
 async function generateSignature(params, secret) {
     const sortedKeys = Object.keys(params).sort();
-    const signatureString = sortedKeys
-        .map(key => `${key}=${params[key]}`)
-        .join("&") + secret;
-
+    const signatureString = sortedKeys.map(key => `${key}=${params[key]}`).join("&") + secret;
     const encoder = new TextEncoder();
     const data = encoder.encode(signatureString);
     const hashBuffer = await crypto.subtle.digest("SHA-1", data);
@@ -27,8 +23,6 @@ async function generateSignature(params, secret) {
 export default {
     async fetch(request) {
         const bot = new Telegraf(CONFIG.BOT_TOKEN);
-
-        // Optimized Base64 for Cloudinary layers
         const b64 = (str) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
         bot.start((ctx) => ctx.reply("🔱 CHILDREN'S PROVIENCE\n\nSend a photo to generate your ID."));
@@ -42,11 +36,10 @@ export default {
 
                 status = await ctx.reply("⚙️ Stage 1/2: Saving to Cloud...");
 
-                // 1. Get Telegram File Link
+                // 1. Get File and Upload
                 const file = await ctx.telegram.getFile(fileId);
                 const tgUrl = `https://api.telegram.org/file/bot${CONFIG.BOT_TOKEN}/${file.file_path}`;
 
-                // 2. Upload to Cloudinary
                 const timestamp = Math.round(new Date().getTime() / 1000);
                 const publicId = `id_${ctx.from.id}_${timestamp}`;
                 const signature = await generateSignature({ public_id: publicId, timestamp: timestamp }, CONFIG.API_SECRET);
@@ -63,9 +56,9 @@ export default {
                 });
 
                 const uploadData = await uploadRes.json();
-                if (!uploadData.public_id) throw new Error("Upload Failed");
+                if (!uploadData.public_id) throw new Error("Cloudinary Upload Failed");
 
-                // 3. Stage 2: Constructing Clean URL
+                // 2. Stage 2: Proxy the image
                 await ctx.telegram.editMessageText(ctx.chat.id, status.message_id, undefined, "🎨 Stage 2/2: Finalizing Graphics...");
 
                 const pfpData = await ctx.telegram.getUserProfilePhotos(ctx.from.id, 0, 1);
@@ -78,7 +71,6 @@ export default {
                 const name = encodeURIComponent((ctx.from.first_name || "AGENT").toUpperCase());
                 const code = Array.from({length: 12}, () => Math.floor(Math.random() * 10)).join('').match(/.{1,4}/g).join('  ');
 
-                // CLEANER LAYER STRUCTURE
                 const layers = [
                     `w_1280,h_720,c_fill,e_brightness:-40`,
                     `l_text:Arial_45_bold:CHILDRENS%20PROVIENCE,g_north,y_60,co_white`,
@@ -87,11 +79,15 @@ export default {
                     `l_text:Courier_60_bold:${encodeURIComponent(code)},g_south_east,x_100,y_80,co_white`
                 ];
 
-                // The "Final Secret": Force extension to .jpg and encode the whole path
                 const finalUrl = `https://res.cloudinary.com/${CONFIG.CLOUD_NAME}/image/upload/${layers.join('/')}/${uploadData.public_id}.jpg`;
 
-                // 4. Send Photo
-                await ctx.replyWithPhoto(finalUrl, { 
+                // --- PROXY LOGIC: Download the image into the Worker first ---
+                const imageRes = await fetch(finalUrl);
+                if (!imageRes.ok) throw new Error("Cloudinary could not render the image.");
+                const imageBlob = await imageRes.blob();
+
+                // Send the actual file bits, not the URL
+                await ctx.replyWithPhoto({ source: imageBlob }, { 
                     caption: "✅ <b>Elite Card Generated</b>", 
                     parse_mode: 'HTML' 
                 });
@@ -105,7 +101,6 @@ export default {
             }
         });
 
-        // HANDLER
         const url = new URL(request.url);
         if (url.pathname === "/webhook" && request.method === "POST") {
             const body = await request.json();
