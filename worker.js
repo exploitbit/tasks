@@ -1,6 +1,6 @@
 import { Telegraf } from 'telegraf';
 
-// --- SECURE CONFIGURATION ---
+// --- CONFIGURATION ---
 const CONFIG = {
     BOT_TOKEN: "8716545255:AAEevulA_Q8sz-cjEXs_9-mN8leuoGI-RSk",
     CLOUD_NAME: "dneusgyzc",
@@ -9,7 +9,7 @@ const CONFIG = {
 };
 
 /**
- * Generates a SHA-1 signature for Cloudinary Uploads
+ * Cloudflare-compatible SHA-1 Signer for Cloudinary
  */
 async function generateSignature(params, secret) {
     const sortedKeys = Object.keys(params).sort();
@@ -35,7 +35,7 @@ export default {
             return btoa(binString).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
         };
 
-        bot.start((ctx) => ctx.reply("📤 Welcome. Send an image to UPLOAD and generate your ID."));
+        bot.start((ctx) => ctx.reply("📤 Welcome to Children's Provience.\n\nPlease send a photo to save and generate your ID."));
 
         bot.on(['photo', 'document'], async (ctx) => {
             let status;
@@ -44,15 +44,15 @@ export default {
                 const fileId = photo ? photo[photo.length - 1].file_id : (ctx.message.document?.file_id);
                 if (!fileId) return ctx.reply("❌ No image detected.");
 
-                status = await ctx.reply("☁️ Uploading & Saving to Cloudinary...");
+                status = await ctx.reply("☁️ Saving to Cloud Library...");
 
-                // 1. Get File from Telegram
+                // 1. Get File Path from Telegram
                 const file = await ctx.telegram.getFile(fileId);
                 const tgUrl = `https://api.telegram.org/file/bot${CONFIG.BOT_TOKEN}/${file.file_path}`;
 
-                // 2. Upload to Cloudinary using API Key & Secret
+                // 2. Upload to Cloudinary (Permanent Storage)
                 const timestamp = Math.round(new Date().getTime() / 1000);
-                const publicId = `bg_${ctx.from.id}_${timestamp}`;
+                const publicId = `user_bg_${ctx.from.id}_${timestamp}`;
                 
                 const params = {
                     public_id: publicId,
@@ -74,9 +74,11 @@ export default {
                 });
 
                 const uploadResult = await uploadResponse.json();
-                if (!uploadResult.public_id) throw new Error(uploadResult.error?.message || "Upload Failed");
+                if (!uploadResult.public_id) {
+                    throw new Error(uploadResult.error?.message || "Upload to Cloudinary failed.");
+                }
 
-                // 3. Get User Profile Pic
+                // 3. Get User Profile Picture
                 const pfpData = await ctx.telegram.getUserProfilePhotos(ctx.from.id, 0, 1);
                 let pfpUrl = "https://res.cloudinary.com/demo/image/upload/v1/avatar.png";
                 if (pfpData.total_count > 0) {
@@ -84,32 +86,37 @@ export default {
                     pfpUrl = `https://api.telegram.org/file/bot${CONFIG.BOT_TOKEN}/${pfpFile.file_path}`;
                 }
 
-                // 4. Build Design Layers
-                const name = (ctx.from.first_name || "AGENT").toUpperCase();
+                // 4. Build Layers
+                const name = (ctx.from.first_name || "MEMBER").toUpperCase();
                 const code = Array.from({length: 12}, () => Math.floor(Math.random() * 10)).join('').match(/.{1,4}/g).join('  ');
 
                 const layers = [
-                    `w_1280,h_720,c_fill,e_brightness:-35`,
-                    `l_text:Arial_42_bold_letter_spacing_5:CHILDRENS%20PROVIENCE/co_white,g_north,y_65/fl_layer_apply`,
-                    `l_fetch:${b64(pfpUrl)}/w_240,h_240,c_fill,r_max,bo_10px_solid_white/g_west,x_130,y_30/fl_layer_apply`,
-                    `l_text:Arial_58_bold:${encodeURIComponent(name)}/co_white,g_west,x_440,y_25/fl_layer_apply`,
-                    `l_text:Courier_62_bold:${encodeURIComponent(code)}/co_white,g_south_east,x_105,y_85/fl_layer_apply`
+                    `w_1280,h_720,c_fill,e_brightness:-40`,
+                    `l_text:Arial_45_bold_letter_spacing_6:CHILDRENS%20PROVIENCE/co_white,g_north,y_60/fl_layer_apply`,
+                    `l_fetch:${b64(pfpUrl)}/w_240,h_240,c_fill,r_max,bo_10px_solid_white/g_west,x_120,y_30/fl_layer_apply`,
+                    `l_text:Arial_55_bold:${encodeURIComponent(name)}/co_white,g_west,x_420,y_20/fl_layer_apply`,
+                    `l_text:Courier_60_bold:${encodeURIComponent(code)}/co_white,g_south_east,x_100,y_80/fl_layer_apply`
                 ];
 
-                // Note: We use the SAVED public_id from Cloudinary now
+                // Construction using the saved Public ID
                 const finalUrl = `https://res.cloudinary.com/${CONFIG.CLOUD_NAME}/image/upload/${layers.join('/')}/${uploadResult.public_id}.jpg`;
 
-                await ctx.replyWithPhoto(finalUrl, { caption: "✅ ID Generated and Saved to Cloud." });
+                // 5. Send Result
+                await ctx.replyWithPhoto(finalUrl, { 
+                    caption: `✅ <b>ID Successfully Generated</b>\n\nBackground saved to your cloud profile.`,
+                    parse_mode: 'HTML'
+                });
+
                 await ctx.deleteMessage(status.message_id).catch(() => {});
 
             } catch (err) {
                 console.error(err);
                 if (status) await ctx.deleteMessage(status.message_id).catch(() => {});
-                await ctx.reply(`❌ FATAL ERROR:\n<code>${err.message}</code>`, { parse_mode: 'HTML' });
+                await ctx.reply(`❌ <b>Error:</b>\n<code>${err.message}</code>`, { parse_mode: 'HTML' });
             }
         });
 
-        // --- HANDLER ---
+        // --- HANDLER LOGIC ---
         const url = new URL(request.url);
         if (url.pathname === "/webhook" && request.method === "POST") {
             const update = await request.json();
@@ -120,9 +127,9 @@ export default {
         if (url.pathname === "/setup") {
             const webhookUrl = `${url.protocol}//${url.host}/webhook`;
             await fetch(`https://api.telegram.org/bot${CONFIG.BOT_TOKEN}/setWebhook?url=${webhookUrl}`);
-            return new Response("Webhook set!");
+            return new Response("Webhook Linked!");
         }
 
-        return new Response("ID Engine Online.");
+        return new Response("System Online.");
     }
 };
