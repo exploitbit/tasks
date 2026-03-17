@@ -1,5 +1,5 @@
 const { Telegraf } = require('telegraf');
-const { createCanvas, loadImage } = require('canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const axios = require('axios'); // Required to prove it's installed
 
 // --- CONFIGURATION ---
