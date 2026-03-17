@@ -9,8 +9,7 @@ const CONFIG = {
 };
 
 /**
- * Manually generates a Cloudinary SHA-1 Signature
- * This replaces the broken SDK functionality.
+ * SHA-1 Signer for Cloudinary REST API
  */
 async function generateSignature(params, secret) {
     const sortedKeys = Object.keys(params).sort();
@@ -29,14 +28,10 @@ export default {
     async fetch(request) {
         const bot = new Telegraf(CONFIG.BOT_TOKEN);
 
-        // Helper: Cloudinary-safe Base64 for layers
-        const b64 = (str) => {
-            const bytes = new TextEncoder().encode(str);
-            const binString = String.fromCodePoint(...bytes);
-            return btoa(binString).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-        };
+        // Optimized Base64 for Cloudinary layers
+        const b64 = (str) => btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
-        bot.start((ctx) => ctx.reply("🔱 System Online. Send an image to PERMANENTLY save it and generate your ID."));
+        bot.start((ctx) => ctx.reply("🔱 CHILDREN'S PROVIENCE\n\nSend a photo to generate your ID."));
 
         bot.on(['photo', 'document'], async (ctx) => {
             let status;
@@ -45,22 +40,16 @@ export default {
                 const fileId = photo ? photo[photo.length - 1].file_id : ctx.message.document?.file_id;
                 if (!fileId) return;
 
-                status = await ctx.reply("⚙️ Stage 1/2: Saving to Cloud Library...");
+                status = await ctx.reply("⚙️ Stage 1/2: Saving to Cloud...");
 
-                // 1. Get Telegram File
+                // 1. Get Telegram File Link
                 const file = await ctx.telegram.getFile(fileId);
                 const tgUrl = `https://api.telegram.org/file/bot${CONFIG.BOT_TOKEN}/${file.file_path}`;
 
-                // 2. Upload to Cloudinary via REST API (Permanent Save)
+                // 2. Upload to Cloudinary
                 const timestamp = Math.round(new Date().getTime() / 1000);
-                const publicId = `id_bg_${ctx.from.id}_${timestamp}`;
-                
-                const params = {
-                    public_id: publicId,
-                    timestamp: timestamp
-                };
-
-                const signature = await generateSignature(params, CONFIG.API_SECRET);
+                const publicId = `id_${ctx.from.id}_${timestamp}`;
+                const signature = await generateSignature({ public_id: publicId, timestamp: timestamp }, CONFIG.API_SECRET);
 
                 const formData = new FormData();
                 formData.append("file", tgUrl);
@@ -70,17 +59,15 @@ export default {
                 formData.append("signature", signature);
 
                 const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${CONFIG.CLOUD_NAME}/image/upload`, {
-                    method: "POST",
-                    body: formData
+                    method: "POST", body: formData
                 });
 
                 const uploadData = await uploadRes.json();
-                if (!uploadData.public_id) throw new Error(uploadData.error?.message || "Cloudinary Upload Failed");
+                if (!uploadData.public_id) throw new Error("Upload Failed");
 
-                // 3. Update Status
-                await ctx.telegram.editMessageText(ctx.chat.id, status.message_id, undefined, "🎨 Stage 2/2: Drawing Graphics...");
+                // 3. Stage 2: Constructing Clean URL
+                await ctx.telegram.editMessageText(ctx.chat.id, status.message_id, undefined, "🎨 Stage 2/2: Finalizing Graphics...");
 
-                // 4. Get Profile Pic
                 const pfpData = await ctx.telegram.getUserProfilePhotos(ctx.from.id, 0, 1);
                 let pfpUrl = "https://res.cloudinary.com/demo/image/upload/v1/avatar.png";
                 if (pfpData.total_count > 0) {
@@ -88,53 +75,49 @@ export default {
                     pfpUrl = `https://api.telegram.org/file/bot${CONFIG.BOT_TOKEN}/${pfpFile.file_path}`;
                 }
 
-                // 5. Build ID Design
-                const name = (ctx.from.first_name || "AGENT").toUpperCase();
+                const name = encodeURIComponent((ctx.from.first_name || "AGENT").toUpperCase());
                 const code = Array.from({length: 12}, () => Math.floor(Math.random() * 10)).join('').match(/.{1,4}/g).join('  ');
 
+                // CLEANER LAYER STRUCTURE
                 const layers = [
                     `w_1280,h_720,c_fill,e_brightness:-40`,
-                    `l_text:Arial_45_bold_letter_spacing_6:CHILDRENS%20PROVIENCE/co_white,g_north,y_60/fl_layer_apply`,
-                    `l_fetch:${b64(pfpUrl)}/w_240,h_240,c_fill,r_max,bo_10px_solid_white/g_west,x_120,y_30/fl_layer_apply`,
-                    `l_text:Arial_55_bold:${encodeURIComponent(name)}/co_white,g_west,x_420,y_20/fl_layer_apply`,
-                    `l_text:Courier_60_bold:${encodeURIComponent(code)}/co_white,g_south_east,x_100,y_80/fl_layer_apply`
+                    `l_text:Arial_45_bold:CHILDRENS%20PROVIENCE,g_north,y_60,co_white`,
+                    `l_fetch:${b64(pfpUrl)}/w_240,h_240,c_fill,r_max,bo_10px_solid_white,g_west,x_120,y_30`,
+                    `l_text:Arial_55_bold:${name},g_west,x_420,y_20,co_white`,
+                    `l_text:Courier_60_bold:${encodeURIComponent(code)},g_south_east,x_100,y_80,co_white`
                 ];
 
+                // The "Final Secret": Force extension to .jpg and encode the whole path
                 const finalUrl = `https://res.cloudinary.com/${CONFIG.CLOUD_NAME}/image/upload/${layers.join('/')}/${uploadData.public_id}.jpg`;
 
-                // 6. Send Result
+                // 4. Send Photo
                 await ctx.replyWithPhoto(finalUrl, { 
-                    caption: `✅ <b>Card Generated Successfully</b>\n\nBackground stored in Cloudinary folder.`,
-                    parse_mode: 'HTML'
+                    caption: "✅ <b>Elite Card Generated</b>", 
+                    parse_mode: 'HTML' 
                 });
 
                 await ctx.deleteMessage(status.message_id).catch(() => {});
 
             } catch (err) {
-                console.error(err);
-                const errorDisplay = `❌ <b>System Error</b>\n<code>${err.message}</code>`;
-                if (status) {
-                    await ctx.telegram.editMessageText(ctx.chat.id, status.message_id, undefined, errorDisplay, { parse_mode: 'HTML' });
-                } else {
-                    await ctx.replyWithHTML(errorDisplay);
-                }
+                const errMsg = `❌ <b>System Error</b>\n<code>${err.message}</code>`;
+                if (status) await ctx.telegram.editMessageText(ctx.chat.id, status.message_id, undefined, errMsg, { parse_mode: 'HTML' });
+                else await ctx.replyWithHTML(errMsg);
             }
         });
 
-        // --- HANDLER ---
+        // HANDLER
         const url = new URL(request.url);
         if (url.pathname === "/webhook" && request.method === "POST") {
-            const update = await request.json();
-            await bot.handleUpdate(update);
+            const body = await request.json();
+            await bot.handleUpdate(body);
             return new Response("OK");
         }
         
         if (url.pathname === "/setup") {
             const webhookUrl = `${url.protocol}//${url.host}/webhook`;
             await fetch(`https://api.telegram.org/bot${CONFIG.BOT_TOKEN}/setWebhook?url=${webhookUrl}`);
-            return new Response("Webhook set!");
+            return new Response("Webhook Ready");
         }
-
-        return new Response("Children's Provience: Status Active");
+        return new Response("System Online");
     }
 };
