@@ -1,0 +1,9 @@
+name = "tg-task-manager"
+main = "src/main.py"
+compatibility_date = "2024-03-20"
+compatibility_flags = ["python_workers"]
+
+# Connects directly to the KV Database you created
+[[kv_namespaces]]
+binding = "TASKS_KV"
+id = "830401d9c17c496a97f3aeb26c200382"
