@@ -7,6 +7,9 @@
     "deploy": "wrangler deploy"
   },
   "devDependencies": {
-    "wrangler": "^3.0.0"
+    "wrangler": "^3.0.0",
+    "axios": "^1.6.8",
+    "canvas": "^2.11.2",
+    "telegraf": "^4.16.3"
   }
 }
